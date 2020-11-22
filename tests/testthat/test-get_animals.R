@@ -70,135 +70,131 @@ expected_col_names <- c(
   "holding_temperature",
   "comments"
 )
-tag_col_names <- c(
-  "tag_id",
-  "tag_fk",
-  "tagger",
-  "tagging_type",
-  "tagging_methodology"
-)
 
-animal1 <- 2824
-animal_multiple <- c(2824, 2825)
-animal_multiple_text <- c(2824, "2825")
-animal_tag_multiple <- 2827 # Has 2 associated tags
-project1 <- "phd_reubens"
-project_multiple <- c("2013_albertkanaal", "phd_reubens")
-sciname1 <- "Gadus morhua"
-sciname_multiple <- c("Anguilla anguilla", "Gadus morhua", "Sentinel")
 
-animals_all <- get_animals(con)
-animals_animal1 <- get_animals(con, animal_id = animal1)
-animals_animal_multiple <- get_animals(con, animal_id = animal_multiple)
-animals_animal_multiple_text <- get_animals(con, animal_id = animal_multiple_text)
-animals_animal_tag_multiple <- get_animals(con, animal_id = animal_tag_multiple)
-animals_project1 <- get_animals(con, animal_project_code = project1)
-animals_project_multiple <- get_animals(con, animal_project_code = project_multiple)
-animals_sciname_multiple <- get_animals(con, scientific_name = sciname_multiple)
-animals_project1_sciname1 <- get_animals(con, animal_project_code = project1, scientific_name = sciname1)
+testthat::test_that("Error is returned for a wrong connection", {
+  con_string = "not_a_connection"
+  expect_error(get_animals(con_string), "Not a connection object to database.")
+})
 
-testthat::test_that("Test input", {
-  expect_error(
-    get_animals("not_a_connection"),
-    "Not a connection object to database."
+
+testthat::test_that("Error is returned for a wrong animal_id", {
+
+  # animal id is a string
+  wrong_class <- "wrong_animal_id"
+  expect_error(get_animals(con, animal_id = wrong_class))
+
+  # animal id is a decimal number
+  decimal_number <- 666.12
+  expect_error(get_animals(con, animal_id = decimal_number))
+
+  # animal id is a negative number
+  negative_number <- -1
+  expect_error(get_animals(con, animal_id = negative_number))
+})
+
+
+testthat::test_that("It's possible to select by animal id", {
+
+  # animal id is an integer
+  animal_id <- 666
+  output <- get_animals(con, animal_id = animal_id)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$animal_id) == animal_id)
+
+  # animal id is the character version of an integer
+  animal_id_string <- as.character(animal_id)
+  output_string <- get_animals(con, animal_id = animal_id_string)
+  expect_is(output_string, "tbl_df")
+  expect_equal(names(output_string), expected_col_names)
+  expect_true(unique(output_string$animal_id) == animal_id)
+
+  # same output for animal id as integer or character version of it
+  expect_equivalent(output_string, output)
+
+  # multiple animal ids
+  animal_ids <- c(666, 667)
+  output_multiple <- get_animals(con, animal_id = animal_ids)
+  expect_is(output_multiple, "tbl_df")
+  expect_equal(names(output_multiple), expected_col_names)
+  expect_true(all(unique(output_multiple$animal_id) %in% animal_ids))
+
+  # output for multiple animals hasn't less rows than output for one animal
+  expect_gte(nrow(output_multiple), nrow(output))
+
+  #' even if multiple animals are asked the same information is returned for a
+  #' specific animal
+  expect_equivalent(output_multiple[output_multiple$animal_id == animal_id,],
+                    output)
+})
+
+
+testthat::test_that("Error is returned for a wrong animal_project_code", {
+  bad_project_name <- "not_a_project"
+  expect_error(get_animals(con, animal_project_code = bad_project_name))
+})
+
+
+testthat::test_that("It's possible to select by animal project code(s)", {
+
+  # one project
+  animal_project <- "2010_phd_reubens"
+  output <- get_animals(con, animal_project_code = animal_project)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$animal_project_code) == animal_project)
+
+  # multiple projects
+  animal_projects <- c("2015_homarus", "2010_phd_reubens")
+  output_multiple <- get_animals(con, animal_project_code = animal_projects)
+  expect_is(output_multiple, "tbl_df")
+  expect_equal(names(output_multiple), expected_col_names)
+  expect_true(all(unique(output_multiple$animal_project_code) %in%
+                    animal_projects)
   )
-  expect_error(
-    get_animals(con, animal_id = "not_an_animal")
-  )
-  expect_error(
-    get_animals(con, animal_id = 20.2) # Not an integer
-  )
-  expect_error(
-    get_animals(con, network_project_code = "not_a_project")
-  )
-  expect_error(
-    get_animals(con, network_project_code = c("thornton", "not_a_project"))
+
+  # output for multiple projects hasn't less rows than output for one project
+  expect_gte(nrow(output_multiple), nrow(output))
+
+  #' even if multiple projects are asked the same information is
+  #' returned for a specific project
+  expect_equivalent(
+    output_multiple[output_multiple$animal_project_code == animal_project,],
+    output
   )
 })
 
-testthat::test_that("Test output type", {
-  expect_is(animals_all, "tbl_df")
-  expect_is(animals_animal1, "tbl_df")
-  expect_is(animals_animal_multiple, "tbl_df")
-  expect_is(animals_animal_multiple_text, "tbl_df")
-  expect_is(animals_animal_tag_multiple, "tbl_df")
-  expect_is(animals_project1, "tbl_df")
-  expect_is(animals_project_multiple, "tbl_df")
-  expect_is(animals_sciname_multiple, "tbl_df")
-  expect_is(animals_project1_sciname1, "tbl_df")
+
+testthat::test_that("Error is returned for a wrong scientific name", {
+  wrong_scientific_name <- "wrong_scientific_name"
+  expect_error(get_animals(con, scientific_name = wrong_scientific_name))
 })
 
-testthat::test_that("Test column names", {
-  expect_equal(names(animals_all), expected_col_names)
-  expect_equal(names(animals_animal1), expected_col_names)
-  expect_equal(names(animals_animal_multiple), expected_col_names)
-  expect_equal(names(animals_animal_multiple_text), expected_col_names)
-  expect_equal(names(animals_animal_tag_multiple), expected_col_names)
-  expect_equal(names(animals_project1), expected_col_names)
-  expect_equal(names(animals_project_multiple), expected_col_names)
-  expect_equal(names(animals_sciname_multiple), expected_col_names)
-  expect_equal(names(animals_project1_sciname1), expected_col_names)
-})
 
-testthat::test_that("Test number of records", {
-  expect_equal(nrow(animals_animal1), 1)
-  expect_equal(nrow(animals_animal_multiple), 2)
-  expect_equal(nrow(animals_animal_multiple_text), 2)
-  expect_equal(nrow(animals_animal_tag_multiple), 1) # Rows should be collapsed
-  expect_equal(nrow(animals_project1), 68)
-  expect_gt(nrow(animals_all), nrow(animals_project_multiple))
-  expect_gt(nrow(animals_all), nrow(animals_sciname_multiple))
-  expect_gt(nrow(animals_all), nrow(animals_project1_sciname1))
-  expect_gt(nrow(animals_project1), nrow(animals_project1_sciname1))
-})
+testthat::test_that("It's possible to select by scientific name(s)", {
 
-testthat::test_that("Test if data is filtered on parameter", {
-  expect_equal(
-    animals_animal1 %>% distinct(animal_id) %>% pull(),
-    c(animal1)
-  )
-  expect_equal(
-    animals_animal_multiple %>% distinct(animal_id) %>% pull(),
-    c(animal_multiple)
-  )
-  expect_equal(
-    animals_animal_multiple_text %>% distinct(animal_id) %>% pull(),
-    c(animal_multiple) # animal_id in data.frame expected to be integers, so not animal_multiple_text
-  )
-  expect_equal(
-    animals_animal_tag_multiple %>% distinct(animal_id) %>% pull(),
-    c(animal_tag_multiple)
-  )
-  expect_equal(
-    animals_project1 %>% distinct(animal_project_code) %>% pull(),
-    c(project1)
-  )
-  expect_equal(
-    animals_project_multiple %>% distinct(animal_project_code) %>% arrange(animal_project_code) %>% pull(),
-    c(project_multiple)
-  )
-  expect_equal(
-    animals_sciname_multiple %>% distinct(scientific_name) %>% arrange(scientific_name) %>% pull(),
-    c(sciname_multiple)
-  )
-  expect_equal(
-    animals_project1_sciname1 %>% distinct(animal_project_code) %>% pull(),
-    c(project1)
-  )
-  expect_equal(
-    animals_project1_sciname1 %>% distinct(scientific_name) %>% pull(),
-    c(sciname1)
-  )
-})
+  # one name
+  scientific_name <- "Gadus morhua"
+  output <- get_animals(con, scientific_name = scientific_name)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$scientific_name) == scientific_name)
 
-testthat::test_that("Test unique ids and collapsed tag information", {
-  expect_equal(nrow(animals_all), nrow(animals_all %>% distinct(pk)))
-  expect_equal(nrow(animals_all), nrow(animals_all %>% distinct(animal_id)))
+  # multiple names
+  scientific_names <- c("Anguilla anguilla", "Gadus morhua")
+  output_multiple <- get_animals(con, scientific_name = scientific_names)
+  expect_is(output_multiple, "tbl_df")
+  expect_equal(names(output_multiple), expected_col_names)
+  expect_true(all(unique(output_multiple$scientific_name) %in% scientific_names))
 
-  has_comma <- apply(
-    animals_animal_tag_multiple %>% select(tag_col_names),
-    MARGIN = 2,
-    function(x) grepl(pattern = ",", x = x)
+  # output for multiple names hasn't less rows than output with one name
+  expect_gte(nrow(output_multiple), nrow(output))
+
+  #' even if multiple scientific names are asked the same information is
+  #' returned for a specific one
+  expect_equivalent(
+    output_multiple[output_multiple$scientific_name == scientific_name,],
+    output
   )
-  expect_true(all(has_comma))
 })

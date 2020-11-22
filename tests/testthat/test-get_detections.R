@@ -30,163 +30,255 @@ expected_col_names <- c(
   "deployment_fk"
 )
 
-application1 <- "acoustic_telemetry" # No "cpod" data at time of writing
-start_date1 <- "2011"
-end_date1 <- "2011-02-01"
-start_date1_full <- as.POSIXct(check_date_time(start_date1, "start_date1"), tz = "UTC")
-end_date1_full <- as.POSIXct(check_date_time(end_date1, "end_date1"), tz = "UTC")
-station1 <- "R03"
-animal_project1 <- "phd_reubens"
-network_project1 <- "thornton"
-tag1 <- "A69-1303-65302"
-receiver1 <- "VR2W-122360"
-sciname1 <- "Anguilla anguilla"
 
-detections_limit <- get_detections(con, limit = TRUE)
-detections_application1 <- get_detections(
-  con, application_type = application1, limit = TRUE
-)
-detections_start_end1 <- get_detections(
-  con,
-  animal_project_code = animal_project1, network_project_code = network_project1,
-  start_date = start_date1, end_date = end_date1, tag_id = tag1
-)
-detections_station1 <- get_detections(
-  con,
-  animal_project_code = animal_project1, network_project_code = network_project1,
-  station_name = station1, tag_id = tag1
-)
-detections_tag1 <- get_detections(con, tag_id = tag1, limit = TRUE)
-detections_receiver1 <- get_detections(con, receiver_id = receiver1, limit = TRUE)
-detections_sciname1 <- get_detections(con, scientific_name = sciname1, limit = TRUE)
-
-testthat::test_that("Test input", {
+testthat::test_that("Error is returned for a wrong connection", {
+  con_string = "not_a_connection"
   expect_error(
-    get_detections("not_a_connection"),
+    get_detections(con_string),
     "Not a connection object to database."
   )
+})
+
+
+testthat::test_that("Argument limit works good", {
+
+  # limit is logical and a tibble df is returned
+  output <- get_detections(con, limit = TRUE)
+  expect_equal(nrow(output), 100)
+  expect_is(output, "tbl_df")
+
+  # error is returned if limit is not a logical
+  expect_error(get_detections(con, limit = 1),
+               msg = "limit must be a logical: TRUE/FALSE.")
+})
+
+
+testthat::test_that("Error is returned for a wrong application type", {
+
+  # wrong application_type
+  wrong_application_type <- "not_an_application_type"
   expect_error(
-    get_detections(con, application_type = "not_an_application_type")
-  )
-  expect_error(
-    get_detections(con, network_project_code = "not_a_project")
-  )
-  expect_error(
-    get_detections(con, network_project_code = c("thornton", "not_a_project"))
-  )
-  expect_error(
-    get_detections(con, animal_project_code = "not_a_project", network_project_code = "thornton")
-  )
-  expect_error(
-    get_detections(con, animal_project_code = c("phd_reubens", "not_a_project"), network_project_code = "thornton")
-  )
-  expect_error(
-    get_detections(con, animal_project_code = "phd_reubens", network_project_code = "thornton", start_date = "not_a_date")
-  )
-  expect_error(
-    get_detections(con, animal_project_code = "phd_reubens", network_project_code = "thornton", start_date = "2011", end_date = "not_a_date")
-  )
-  expect_error(
-    get_detections(con, animal_project_code = "phd_reubens", network_project_code = "thornton", station_name = "not_a_station")
-  )
-  expect_error(
-    get_detections(con, animal_project_code = "phd_reubens", network_project_code = "thornton", station_name = c("R03", "not_a_station"))
-  )
-  expect_error(
-    get_detections(con, animal_project_code = "phd_reubens", network_project_code = "thornton", tag_id = c("R03", "not_a_tag"))
-  )
-  expect_error(
-    get_detections(con, animal_project_code = "phd_reubens", network_project_code = "thornton", receiver_id = c("not_a_receiver"))
-  )
-  expect_error(
-    get_detections(con, scientific_name = c("not_a_sciname"))
+    get_detections(con, application_type = wrong_application_type)
   )
 })
 
-testthat::test_that("Test output type", {
-  expect_is(detections_limit, "tbl_df")
-  expect_is(detections_application1, "tbl_df")
-  expect_is(detections_start_end1, "tbl_df")
-  expect_is(detections_station1, "tbl_df")
-  expect_is(detections_tag1, "tbl_df")
-  expect_is(detections_receiver1, "tbl_df")
-  expect_is(detections_sciname1, "tbl_df")
+testthat::test_that("It's possible to select by application type", {
+
+  # acoustic telemetry data
+  acoustic_telemetry <- "acoustic_telemetry"
+  output <- get_detections(con,
+                           application_type = acoustic_telemetry,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$application_type) == acoustic_telemetry)
 })
 
-testthat::test_that("Test column names", {
-  expect_equal(names(detections_limit), expected_col_names)
-  expect_equal(names(detections_application1), expected_col_names)
-  expect_equal(names(detections_start_end1), expected_col_names)
-  expect_equal(names(detections_station1), expected_col_names)
-  expect_equal(names(detections_tag1), expected_col_names)
-  expect_equal(names(detections_receiver1), expected_col_names)
-  expect_equal(names(detections_sciname1), expected_col_names)
-})
 
-testthat::test_that("Test number of records", {
-  expect_equal(nrow(detections_limit), 100)
-  expect_equal(nrow(detections_limit), nrow(detections_application1))
-  expect_lt(nrow(detections_limit), nrow(detections_start_end1))
-  expect_lt(nrow(detections_limit), nrow(detections_station1))
-  expect_gte(nrow(detections_limit), nrow(detections_tag1))
-  expect_gte(nrow(detections_limit), nrow(detections_receiver1))
-  expect_gte(nrow(detections_limit), nrow(detections_sciname1))
-})
-
-testthat::test_that("Test date range", {
-  expect_gte(
-    detections_start_end1 %>% summarize(min_date_time = min(date_time)) %>% pull(min_date_time),
-    start_date1_full
-  )
-  expect_lte(
-    detections_start_end1 %>% summarize(max_date_time = max(date_time)) %>% pull(max_date_time),
-    end_date1_full
+testthat::test_that("Error is returned for a wrong network_project_code", {
+  bad_project_name <- "not_a_project"
+  expect_error(
+    get_detections(con, network_project_code = bad_project_name)
   )
 })
 
-testthat::test_that("Test if data is filtered on parameter", {
-  expect_equal(
-    detections_application1 %>% distinct(application_type) %>% pull(),
-    c(application1)
+
+testthat::test_that("It's possible to select by network project code(s)", {
+
+  # one project
+  network_project <- "thornton"
+  output <- get_detections(con,
+                           network_project_code = network_project,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$network_project_code) == network_project)
+
+  # multiple projects
+  network_projects <- c("albert", "thornton")
+  output <- get_detections(con,
+                           network_project_code = network_projects,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(all(unique(output$network_project_code) %in% network_projects))
+})
+
+
+testthat::test_that("Error is returned for a wrong animal_project_code", {
+  bad_project_name <- "not_a_project"
+  expect_error(
+    get_detections(con, animal_project_code = bad_project_name)
   )
-  expect_equal(
-    detections_start_end1 %>% distinct(animal_project_code) %>% pull(),
-    c(animal_project1)
-  )
-  expect_equal(
-    detections_start_end1 %>% distinct(network_project_code) %>% pull(),
-    c(network_project1)
-  )
-  expect_equal(
-    detections_start_end1 %>% distinct(tag_id) %>% pull(),
-    c(tag1)
-  )
-  expect_equal(
-    detections_station1 %>% distinct(animal_project_code) %>% pull(),
-    c(animal_project1)
-  )
-  expect_equal(
-    detections_station1 %>% distinct(network_project_code) %>% pull(),
-    c(network_project1)
-  )
-  expect_equal(
-    detections_station1 %>% distinct(tag_id) %>% pull(),
-    c(tag1)
-  )
-  expect_equal(
-    detections_station1 %>% distinct(station_name) %>% pull(),
-    c(station1)
-  )
-  expect_equal(
-    detections_tag1 %>% distinct(tag_id) %>% pull(),
-    c(tag1)
-  )
-  expect_equal(
-    detections_receiver1 %>% distinct(receiver_id) %>% pull(),
-    c(receiver1)
-  )
-  expect_equal(
-    detections_sciname1 %>% distinct(scientific_name) %>% pull(),
-    c(sciname1)
-  )
+})
+
+
+testthat::test_that("It's possible to select by animal project code(s)", {
+
+  # one project
+  animal_project <- "2010_phd_reubens"
+  output <- get_detections(con,
+                           animal_project_code = animal_project,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$animal_project_code) == animal_project)
+
+  # multiple projects
+  animal_projects <- c("2015_homarus", "2010_phd_reubens")
+  output <- get_detections(con,
+                           animal_project_code = animal_projects,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(all(unique(output$animal_project_code) %in% animal_projects))
+})
+
+
+testthat::test_that("It's possible to get detections within a time period", {
+
+  start_date <- "2011"
+  end_date <- "2011-02-01"
+  start_date <- as.POSIXct(check_date_time(start_date, "start_date"))
+  end_date <- as.POSIXct(check_date_time(end_date, "end_date"))
+
+  # only start
+  output <-  get_detections(con,
+                            start_date = start_date,
+                            limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(all(output$date_time >= start_date))
+
+  # only end
+  output <-  get_detections(con,
+                            end_date = end_date,
+                            limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(all(output$date_time <= end_date))
+
+  # both start and end
+  output <-  get_detections(con,
+                            start_date = start_date,
+                            end_date = end_date,
+                            limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(all(output$date_time >= start_date &
+                    output$date_time <= end_date))
+})
+
+
+testthat::test_that("Error is returned for a wrong station name", {
+  wrong_station <- "wrong_station"
+  expect_error(get_detections(con,
+                              station_name = wrong_station,
+                              limit = TRUE))
+})
+
+
+testthat::test_that("It's possible to select by station name(s)", {
+
+  # one station
+  station <- "R03"
+  output <- get_detections(con,
+                           station_name = station,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$station_name) == station)
+
+  # multiple stations
+  stations <- c("s-4c", "R03")
+  output <- get_detections(con,
+                           station_name = stations,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(all(unique(output$station_name) %in% stations))
+})
+
+
+testthat::test_that("Error is returned for a wrong tag", {
+  wrong_tag <- "wrong_tag"
+  expect_error(get_detections(con,
+                              tag_id = wrong_tag,
+                              limit = TRUE))
+})
+
+
+testthat::test_that("It's possible to select by tag(s)", {
+
+  # one tag
+  tag <- "A69-1303-65302"
+  output <- get_detections(con, tag_id = tag, limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$tag_id) == tag)
+
+  # multiple tags
+  tags <- c("A69-1303-65304", "A69-1303-65302")
+  output <- get_detections(con,
+                           tag_id = tags,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(all(unique(output$tag_id) %in% tags))
+})
+
+
+testthat::test_that("Error is returned for a wrong receiver", {
+  wrong_receiver <- "wrong_receiver"
+  expect_error(get_detections(con,
+                              receiver_id = wrong_receiver,
+                              limit = TRUE))
+})
+
+
+testthat::test_that("It's possible to select by receiver(s)", {
+
+  # one receiver
+  receiver <- "VR2W-122360"
+  output <- get_detections(con, receiver_id = receiver, limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$receiver_id) == receiver)
+
+  # multiple receivers
+  receivers <- c("VR2W-110784", "VR2W-122360")
+  output <- get_detections(con,
+                           receiver_id = receivers,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(all(unique(output$receiver_id) %in% receivers))
+})
+
+
+testthat::test_that("Error is returned for a wrong scientific name", {
+  wrong_scientific_name <- "wrong_scientific_name"
+  expect_error(get_detections(con,
+                              scientific_name = wrong_scientific_name,
+                              limit = TRUE))
+})
+
+
+testthat::test_that("It's possible to select by scientific name(s)", {
+
+  # one name
+  scientific_name <- "Gadus morhua"
+  output <- get_detections(con, scientific_name = scientific_name, limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(unique(output$scientific_name) == scientific_name)
+
+  # multiple names
+  scientific_names <- c("Anguilla anguilla", "Gadus morhua")
+  output <- get_detections(con,
+                           scientific_name = scientific_names,
+                           limit = TRUE)
+  expect_is(output, "tbl_df")
+  expect_equal(names(output), expected_col_names)
+  expect_true(all(unique(output$scientific_name) %in% scientific_name))
 })
