@@ -1,0 +1,268 @@
+---
+title: "Explore ETN data"
+author: "Damiano Oldoni"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Explore ETN data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+In this vignette we show a typical workflow using `etn` package to retrieve data, the [`dplyr`](https://dplyr.tidyverse.org/) package (part of the [tidyverse](https://www.tidyverse.org/) R pacakges collection) to perform basic data exploration and some other packages for visualization (`leaflet`) and date-time data (`lubridate`).
+
+To start, load the `etn`package:
+
+```{r load_pkg}
+library(etn)
+```
+
+and connect with your user credentials (as received by VLIZ) to the database:
+
+```{r connect_to_db}
+con <- connect_to_etn(Sys.getenv("userid"), Sys.getenv("pwd"))
+```
+
+We also load other packages:
+
+```{r load_other_pkgs, message=FALSE}
+library(dplyr)
+library(lubridate)
+library(leaflet)
+library(htmltools)
+```
+
+## Select project(s) of interest
+
+First we need to know which projects we need. As the project names are not easy to remember, it is always good to start by an overview of all projects we have access to:
+
+```{r get_my_projects}
+my_projects <- get_projects()
+```
+
+Typically we are interested in animal projects. You can filter by `project_type`:
+
+```{r}
+my_projects<- 
+  my_projects %>%
+  filter(project_type == "animal")
+# show the first 10 projects
+my_projects %>%
+  head(10)
+```
+
+or you can specify the type of project in the `get_projects()` function directly:
+
+```{r get_my_projects_directly}
+my_projects <- get_projects(project_type = "animal")
+# show the first 10 projects
+my_projects %>%
+  head(10)
+```
+
+Let's say we are interested in the data from projects `2012_leopoldkanaal` and `2013_albertkanaal`:
+
+```{r projects_study}
+projects_study <- c("2014_demer", "2013_albertkanaal")
+```
+
+We can get the time span of these projects by checking the columns `start_date` and `end_date`:
+
+```{r start_end_date}
+my_projects %>%
+  filter(project_code %in% c(projects_study)) %>% 
+  select(start_date, end_date)
+```
+
+
+## Data exploration
+
+### Animals under study
+
+Which species and how many individuals have been tracked during these projects?
+
+```{r get_species_and_number_individuals}
+animals <- get_animals(animal_project_code = projects_study)
+animals %>%
+  count(scientific_name)
+```
+
+Let's say we are interested in the tracking data of Wels catfish (_Silurus glanis_) between begin 2014 and end 2015:
+
+```{r get_detections_silurus}
+detections_silurus <- get_detections(animal_project_code = projects_study,
+                                     start_date = "2014-01-01",
+                                     end_date = "2015-12-31",
+                                     scientific_name = "Silurus glanis")
+```
+
+### Detection history
+
+Which fishes have been detected (`animal_id`) and in which period?
+
+```{r detections_silurus_period}
+detections_silurus_period <-
+  detections_silurus %>%
+  mutate(date = date(date_time)) %>%
+  group_by(animal_id) %>%
+  summarise(start = min(date),
+            end = max(date))
+detections_silurus_period
+```
+
+We can also get the tracking duration:
+
+```{r duration_tracking}
+detections_silurus_duration <-
+  detections_silurus %>%
+  group_by(animal_id) %>%
+  summarise(duration = max(date_time) - min(date_time))
+detections_silurus_duration
+```
+
+How many detections per fish?
+
+```{r n_detections}
+detections_silurus %>%
+  group_by(animal_id) %>%
+  count()
+```
+
+Along how many deployments (stations) have the fishes been detected?
+
+```{r}
+detections_silurus %>%
+  group_by(animal_id) %>%
+  distinct(station_name) %>%
+  count()
+```
+
+### Deployments
+
+Which deployments have been involved?
+
+```{r deployments_silurus}
+deployments_silurus <-
+  detections_silurus %>%
+  select(starts_with("deploy"), station_name) %>%
+  distinct()
+deployments_silurus
+```
+
+Create a map of the involved deployments:
+
+```{r map_deployments}
+leaflet(deployments_silurus) %>%
+  addTiles() %>%
+  addMarkers(lng = ~deploy_longitude,
+             lat = ~deploy_latitude,
+             popup = ~htmlEscape(paste0(station_name, " (", deployment_fk, ")")))
+```
+
+Sometimes it's interesting to know the number of detections per deployment:
+
+```{r n_detections_per_deployment}
+n_detect_deploy <- 
+  detections_silurus %>%
+  group_by(deployment_fk, station_name) %>%
+  count()
+n_detect_deploy
+```
+
+More information about the specific deployments can be retrieved by `get_deployments()` function. First we get the network projects involved: 
+
+```{r networks_involved}
+networks_silurus <- 
+  detections_silurus %>%
+  distinct(network_project_code)
+networks_silurus
+```
+
+and based on this information we can retrieve the metadata about the deployments. Be careful to set `open_only` equal to `FALSE` to get all deployments. To get the specific deployments, a filter on deployment's primary key is needed:
+
+```{r get_deployment_info}
+deployments_silurus <-
+  # get all deployments from the involved networks
+  get_deployments(network_project_code = networks_silurus$network_project_code,
+                  open_only = FALSE) %>%
+  # filter the deployments based on their unique identifier
+  filter(pk %in% detections_silurus$deployment_fk)
+
+deployments_silurus
+```
+
+Deployment duration:
+
+```{r deployment_duration}
+deployments_silurus_duration <- 
+  deployments_silurus %>%
+  mutate(duration = recover_date_time - deploy_date_time) %>%
+  select(pk, station_name, duration)
+deployments_silurus_duration
+```
+
+Number of days a deployment detected the passage of one or more fishes:
+
+```{r n_active_days_deployments_silurus}
+n_active_days_deployments_silurus <- 
+  detections_silurus %>%
+  mutate(date = date(date_time)) %>%
+  distinct(deployment_fk, station_name, date) %>%
+  group_by(deployment_fk, station_name) %>%
+  summarise(n_days = n())
+n_active_days_deployments_silurus
+```
+
+Relative detection duration, i.e. number of days with at least one detection divided by deployment duration:
+
+```{r}
+n_active_days_deployments_silurus %>%
+  left_join(deployments_silurus_duration,
+            by = c("deployment_fk" = "pk", "station_name")) %>%
+  mutate(relative_detection_duration = n_days / as.numeric(duration)) %>%
+  select(deployment_fk, station_name, relative_detection_duration)
+```
+
+### Data visualization
+
+The package `leaflet` is very useful to create maps.
+
+We start creating a map of the involved deployments showing the station name and deployment ID:
+
+```{r map_deployments}
+leaflet(deployments_silurus) %>%
+  addTiles() %>%
+  addMarkers(lng = ~deploy_longitude,
+             lat = ~deploy_latitude,
+             popup = ~htmlEscape(paste0(station_name, " (", deployment_fk, ")")))
+```
+
+In the previous section we calculated the number of detections per deployment, `n_detect_deploy`. We can visualize such information on a map by retrieving first the geographical coordinates of the deployments:
+
+```{r leaflet_n_detections_ Wels_catfish}
+n_detect_deploy %>%
+  left_join(deployments_silurus %>%
+                select(deployment_fk, 
+                       deploy_latitude,
+                       deploy_longitude),
+              by = "deployment_fk") %>%
+  leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~deploy_longitude,
+             lat = ~deploy_latitude,
+             radius = ~log(n),
+             opacity = 0.8,
+             stroke = FALSE,
+             ) %>% 
+  addLegend(title = "Number of detections")
+```
+

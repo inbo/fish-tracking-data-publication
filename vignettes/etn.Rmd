@@ -29,7 +29,7 @@ library(etn)
 When not installed, do not forget to install the package using the `devtools` package:
 
 ```{r eval=FALSE, echo=TRUE}
-# install.packages("devtools")
+if (!"devtools" %in% installed.packages()) install.packages("devtools")
 devtools::install_github("inbo/etn")
 ```
 
@@ -64,6 +64,14 @@ As projects are defined both on the level of the `animal` as well as the `networ
 my_network_projects <- get_projects(con, project_type = "network")
 head(my_network_projects, 10) # print 10 first
 ```
+
+If you want just to retrieve the network/animal projects names, you can use the `list_network_project_codes(con)`/`list_animal_project_codes(con)`:
+
+```r{list_projects}
+list_network_project_codes(con)
+```
+
+Check the [list parameter options](https://inbo.github.io/etn/reference/index.html#section-list-parameter-options) for all `list_*()` available functions.
 
 ### Receiver overview
 
@@ -125,6 +133,13 @@ As such, selecting the animals metadata for the `2012_leopoldkanaal` project:
 ```{r}
 my_animals <- get_animals(con, animal_project_code = "2012_leopoldkanaal")
 head(my_animals, 10) # print 10 first
+```
+
+To minimize spelling errors, the `etn` functions are case insensitive. An example:
+
+```{r case_check}
+my_animals_case_check <- get_animals(con, animal_project_code = "2012_LEopoLdkAnAaL")
+identical(my_animals, my_animals_case_check)
 ```
 
 ### Transmitter overview
